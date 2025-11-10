@@ -1,0 +1,30 @@
+# Dependencias de Node
+node_modules/
+
+# Archivo de variables de entorno (¡Muy importante no subirlo!)
+.env
+
+# Archivos de log
+*.log
+
+# Archivo de depuración de npm
+npm-debug.log*
+
+# Archivos de documentación de seguimiento (Bitácoras, Cronogramas, etc.)
+*Bitacora*.txt
+*Cronograma*.txt
+*EstadoDeProyecto*.txt
+*Readme*.txt
+ROADMAP*.txt
+ROADMAP*.md.txt
+ENTREGAME_*
+
+# Archivos temporales o de sistema
+Thumbs.db
+.DS_Store
+
+# Archivos de entrega temporales
+Entrega_ContenidoJS_*.txt
+
+# Prueba minima viable de conexion con 360Dialog
+test_360d_simple/
