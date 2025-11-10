@@ -26,5 +26,6 @@ Thumbs.db
 # Archivos de entrega temporales
 Entrega_ContenidoJS_*.txt
 
-# Prueba minima viable de conexion con 360Dialog
-test_360d_simple/
+# Script para consolidar todo el proyecto
+Extrae.ps1
+
