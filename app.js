@@ -7,8 +7,8 @@ const path = require('path'); // Importar path para manejo de rutas
 const logger = require('./src/utils/logger'); // Importar nuestro logger centralizado
 
 // Importar los controladores que creamos
-const { verifyWebhook, handleIncomingMessage } = require('./src/controllers/webhookController');
-const { handleWebhook: handlePayPalWebhook } = require('./src/controllers/paypalWebhookController');
+const { verifyWebhook, handleIncomingMessage } = require('./src/controllers/webhookController'); // Solo para WhatsApp
+const { handleWebhook: handlePayPalWebhook } = require('./src/controllers/paypalWebhookController'); // Solo para PayPal
 
 // Crear la aplicación Express
 const app = express();
