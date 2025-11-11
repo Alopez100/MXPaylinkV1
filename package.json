@@ -1,0 +1,16 @@
+{
+  "name": "mxpaylinkv1",
+  "version": "1.0.0",
+  "description": "Reconstrucción del sistema MXPaylink desde cero con un enfoque modular y simplificado.",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.0"
+  },
+  "engines": {
+    "node": "22.16.0"
+  }
+}
