@@ -9,6 +9,9 @@ node_modules/
 
 # Archivo de depuración de npm
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
 # Archivos de documentación de seguimiento (Bitácoras, Cronogramas, etc.)
 *Bitacora*.txt
@@ -29,3 +32,49 @@ Entrega_ContenidoJS_*.txt
 # Script para consolidar todo el proyecto
 Extrae.ps1
 
+# Otros archivos comunes de Node.js
+# Directorio de cache de npm
+.npm
+
+# Archivos temporales de ESLint
+.eslintcache
+
+# Archivos temporales de REPL
+.node_repl_history
+
+# Directorios de cache de herramientas comunes
+.cache/
+.nuxt/
+dist/
+.next/
+.vuepress/dist/
+.output/
+.webpack/
+
+# Archivos de configuración de IDEs (ejemplos)
+.vscode/
+.idea/
+
+# Archivos de salida de empaquetado
+*.tgz
+
+# Archivos de cache de Yarn (si se usa)
+.yarn-integrity
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# Archivos de cache de otros entornos
+.nyc_output/
+coverage/
+lib-cov/
+
+# Archivos temporales de build tools
+.grunt/
+.bower-cache/
+.bower-registry/
+.bower-tmp/
+
+# Archivos de certbot (si se usa para SSL)
+www/.well-known/acme-challenge/
