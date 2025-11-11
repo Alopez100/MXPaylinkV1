@@ -1,16 +1,16 @@
 // src/handlers/registeredHandler.js
 // Responsabilidad: Gestionar la solicitud de pago de un cliente activo.
 // Entrada: from, messageText, customer (el objeto cliente ya obtenido).
-// Lógica (Simplificada para V1 con solo PayPal):
+// Lógica (Actualizada para V1 con OpenAI y sin email):
 //   - Verifica Customer.service_status === 'activo'.
-//   - Extrae datos (cliente final, monto, concepto) de messageText.
-//   - Llama a servicePaymentGenerator.createServicePaymentLinkForCustomer(...) (el link que paga *el cliente final*).
+//   - Extrae datos (cliente final, monto, concepto) de messageText usando OpenAI.
+//   - Llama a servicePaymentGenerator.createFinalPaymentLinkForCustomer(...) (el link que paga *el cliente final*).
 //   - Obtiene el finalPaymentLink.
-//   - Envia finalPaymentLink por WhatsApp al cliente final.
+//   - Envia finalPaymentLink por WhatsApp al cliente final (simulado).
 // Siguiente Paso: El cliente final paga el link (activa webhook de pago final, fuera del alcance inmediato de V1).
 
 const logger = require('../utils/logger'); // Importamos el logger
-const commandExtractor = require('../services/commandExtractor'); // Importamos el extractor de comandos
+const commandExtractor = require('../services/commandExtractor'); // Importamos el extractor de comandos (ahora con OpenAI)
 const servicePaymentGenerator = require('../services/servicePaymentGenerator'); // Importamos el generador de links
 // const whatsappService = require('../services/whatsappService'); // Importaremos esto cuando esté disponible
 
@@ -35,15 +35,14 @@ const handle = async (from, messageText, customer) => {
     logger.debug(`[REGISTERED HANDLER] Cliente ${from} tiene el servicio activo. Procediendo con la extracción de datos.`);
 
     // 2. Extraer datos (cliente final, monto, concepto) del messageText
-    // Usamos el nuevo módulo commandExtractor para esto
+    // Usamos el nuevo módulo commandExtractor (ahora con OpenAI) para esto
     const extractedData = await commandExtractor.extractPaymentData(messageText);
 
     if (!extractedData) {
         logger.warn(`[REGISTERED HANDLER] No se pudieron extraer datos válidos del mensaje para ${from}. Mensaje: "${messageText}"`);
         // Enviar mensaje de error o formato incorrecto al cliente
-        // const errorMessage = "Formato de mensaje incorrecto. Por favor, envía: PAGO [monto] [concepto] [nombre_cliente_final] [email_cliente_final]";
-        // await whatsappService.sendMessage(from, errorMessage);
-        console.log(`[SIMULACIÓN WHATSAPP] Enviando a ${from}: Formato de mensaje incorrecto. Por favor, envía: PAGO [monto] [concepto] [nombre_cliente_final] [email_cliente_final]`);
+        // El mensaje de error en commandExtractor.js ya se actualizó para reflejar el nuevo formato
+        console.log(`[SIMULACIÓN WHATSAPP] Enviando a ${from}: Formato de mensaje incorrecto. Por favor, envía: Cobra a (Nombre Cliente Final) (Monto) por (Descripción).`);
         return;
     }
 
@@ -53,21 +52,23 @@ const handle = async (from, messageText, customer) => {
     // En V1, asumimos que el cliente registrado solo usa PayPal para generar el link para su cliente final.
     // En el futuro, aquí se podría integrar la lógica de selección de proveedor si se permiten múltiples proveedores para el cliente final.
     try {
-        const { amount, concept, finalCustomerName, finalCustomerEmail } = extractedData;
+        // Extraer los datos devueltos por el extractor actualizado (sin email)
+        const { amount, concept, finalCustomerName /*, finalCustomerEmail */ } = extractedData;
 
         // Generar el link de pago para el cliente final usando el proveedor PayPal
         // El generador debe usar las credenciales de PayPal del cliente registrado (customer.paypal_creds)
+        // PASAMOS 'null' o 'undefined' como email del cliente final, ya que no se extrae
         const finalPaymentLink = await servicePaymentGenerator.createFinalPaymentLinkForCustomer(
             customer.id, // ID del cliente MXPaylink (el que paga el servicio)
             customer.paypal_creds, // Credenciales de PayPal del cliente MXPaylink (simulado aquí)
             amount,
             concept,
             finalCustomerName,
-            finalCustomerEmail
+            null // <-- PASAMOS NULL (o undefined) para el email del cliente final
         );
 
         if (finalPaymentLink) {
-            logger.info(`[REGISTERED HANDLER] Link de pago generado exitosamente para cliente final ${finalCustomerName} (${finalCustomerEmail}) por ${from}. Link: ${finalPaymentLink}`);
+            logger.info(`[REGISTERED HANDLER] Link de pago generado exitosamente para cliente final ${finalCustomerName} por ${from}. Link: ${finalPaymentLink}`);
             // 4. Enviar el link final al número de teléfono del cliente final (esto se obtendría del extractedData si se incluye)
             // Por ahora, simulamos el envío al cliente final. En la realidad, podría haber un número de cliente final en extractedData.
             // await whatsappService.sendMessage(finalCustomerPhone, `Hola ${finalCustomerName}, aquí está tu link de pago: ${finalPaymentLink}`);

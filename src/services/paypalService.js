@@ -1,9 +1,9 @@
 // src/services/paypalService.js
 // Responsabilidad: Interactuar específicamente con la API de PayPal para crear órdenes de pago.
-// Lógica (Simplificada para V1):
-//   - Recibir credenciales del cliente MXPaylink, monto, concepto, nombre y email del cliente final.
+// Lógica (Actualizada para V1 sin email del cliente final):
+//   - Recibir credenciales del cliente MXPaylink, monto, concepto, nombre del cliente final (opcional).
 //   - Obtener un access token de PayPal usando las credenciales.
-//   - Crear una orden de pago en PayPal usando el token.
+//   - Crear una orden de pago en PayPal usando el token (sin usar email del cliente final).
 //   - Devolver la approval_url y el order_id.
 
 const logger = require('../utils/logger'); // Importamos el logger
@@ -62,12 +62,12 @@ const getAccessToken = async (creds) => {
  * @param {Object} creds - Las credenciales de PayPal del cliente MXPaylink (client_id, secret).
  * @param {number} amount - El monto del pago.
  * @param {string} concept - El concepto o descripción del pago.
- * @param {string} finalCustomerName - El nombre del cliente final.
- * @param {string} finalCustomerEmail - El email del cliente final.
+ * @param {string} finalCustomerName - El nombre del cliente final (opcional para PayPal).
+ * @param {string|null|undefined} finalCustomerEmail - El email del cliente final (ahora opcional o no usado).
  * @returns {Promise<Object|null>} - Un objeto con { approvalUrl, orderId } o null si falla.
  */
 const createOrder = async (creds, amount, concept, finalCustomerName, finalCustomerEmail) => {
-    logger.info(`[PAYPAL SERVICE] Creando orden de pago en PayPal para cliente final: ${finalCustomerName} (${finalCustomerEmail}), monto: ${amount}, concepto: "${concept}".`);
+    logger.info(`[PAYPAL SERVICE] Creando orden de pago en PayPal para cliente final: ${finalCustomerName || 'No especificado'} (${finalCustomerEmail || 'No especificado'}), monto: ${amount}, concepto: "${concept}".`);
 
     try {
         // 1. Obtener el Access Token
@@ -82,14 +82,14 @@ const createOrder = async (creds, amount, concept, finalCustomerName, finalCusto
                     value: amount.toString() // Convertir el número a string
                 },
                 description: concept, // Descripción del pago
-                // Opcional: Incluir información del pagador
-                payee: {
-                    // email_address: finalCustomerEmail // Opcional: Si se quiere forzar el email en PayPal
-                },
-                // Opcional: Pasar el nombre del cliente final si PayPal lo permite
+                // Opcional: Incluir información del pagador (NO incluimos email del cliente final)
+                // payee: {
+                //     // email_address: finalCustomerEmail // <-- COMENTADO/ELIMINADO: No se usa el email del cliente final
+                // },
+                // Opcional: Pasar el nombre del cliente final si PayPal lo permite (no es obligatorio para la orden)
                 // shipping: {
                 //     name: {
-                //         full_name: finalCustomerName
+                //         full_name: finalCustomerName // <-- PUEDE COMENTARSE si no es necesario
                 //     }
                 // }
             }],
@@ -120,7 +120,7 @@ const createOrder = async (creds, amount, concept, finalCustomerName, finalCusto
             data: orderData,
         });
 
-        logger.info(`[PAYPAL SERVICE] Orden de pago creada exitosamente en PayPal para cliente final ${finalCustomerName}. ID: ${response.data.id}`);
+        logger.info(`[PAYPAL SERVICE] Orden de pago creada exitosamente en PayPal para cliente final ${finalCustomerName || 'No especificado'}. ID: ${response.data.id}`);
 
         // 4. Extraer la approval_url del response
         const approvalUrl = response.data.links.find(link => link.rel === 'approve')?.href;
@@ -137,7 +137,7 @@ const createOrder = async (creds, amount, concept, finalCustomerName, finalCusto
         };
 
     } catch (error) {
-        logger.error(`[PAYPAL SERVICE] Error al crear la orden de pago en PayPal para cliente final ${finalCustomerName} (${finalCustomerEmail}):`, error.message);
+        logger.error(`[PAYPAL SERVICE] Error al crear la orden de pago en PayPal para cliente final ${finalCustomerName || 'No especificado'} (${finalCustomerEmail || 'No especificado'}):`, error.message);
         if (error.response) {
             logger.error('[PAYPAL SERVICE] Detalles del error de PayPal:', error.response.data);
         }

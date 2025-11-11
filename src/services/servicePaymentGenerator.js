@@ -1,8 +1,8 @@
 // src/services/servicePaymentGenerator.js
 // Responsabilidad: Generar el link de pago *final* para el cliente final usando el proveedor especificado (en V1, solo PayPal).
-// Lógica (Simplificada para V1 con solo PayPal):
-//   - Recibir datos del cliente final (monto, concepto, nombre, email), credenciales del cliente MXPaylink.
-//   - Llamar a paypalService.createOrder para crear la orden en PayPal.
+// Lógica (Actualizada para V1 con OpenAI y sin email del cliente final):
+//   - Recibir datos del cliente final (monto, concepto, nombre), credenciales del cliente MXPaylink.
+//   - Llamar a paypalService.createOrder para crear la orden en PayPal (sin usar email del cliente final).
 //   - Devolver la approval_url o null si falla.
 
 const logger = require('../utils/logger'); // Importamos el logger
@@ -15,7 +15,7 @@ const paypalService = require('./paypalService'); // Importamos el servicio espe
  * @param {number} amount - El monto del pago.
  * @param {string} concept - El concepto o descripción del pago.
  * @param {string} finalCustomerName - El nombre del cliente final.
- * @param {string} finalCustomerEmail - El email del cliente final.
+ * @param {string|null|undefined} finalCustomerEmail - El email del cliente final (ahora puede ser null o undefined).
  * @returns {string|null} - La approval_url generada por PayPal o null si falla.
  */
 const createFinalPaymentLinkForCustomer = async (
@@ -24,20 +24,21 @@ const createFinalPaymentLinkForCustomer = async (
     amount,
     concept,
     finalCustomerName,
-    finalCustomerEmail
+    finalCustomerEmail // <-- Puede ser null o undefined ahora
 ) => {
-    logger.info(`[SERVICE PAYMENT GENERATOR] Generando link de pago para cliente final: ${finalCustomerName} (${finalCustomerEmail}), monto: ${amount}, concepto: "${concept}", solicitado por cliente MXPaylink ID: ${customerId}`);
+    logger.info(`[SERVICE PAYMENT GENERATOR] Generando link de pago para cliente final: ${finalCustomerName} (${finalCustomerEmail || 'No especificado'}), monto: ${amount}, concepto: "${concept}", solicitado por cliente MXPaylink ID: ${customerId}`);
 
     try {
         // Validar entradas básicas (esto se puede mejorar)
-        if (!customerPayPalCreds || !amount || !concept || !finalCustomerName || !finalCustomerEmail) {
+        // Se elimina la validación estricta de finalCustomerEmail
+        if (!customerPayPalCreds || !amount || !concept || !finalCustomerName) {
             logger.error(`[SERVICE PAYMENT GENERATOR] Datos insuficientes para generar el pago. Recibido:`, {
                 customerId,
                 hasCreds: !!customerPayPalCreds,
                 amount,
                 concept,
                 finalCustomerName,
-                finalCustomerEmail
+                finalCustomerEmail // <-- Registrar también este valor, aunque sea null/undefined
             });
             return null;
         }
@@ -48,12 +49,13 @@ const createFinalPaymentLinkForCustomer = async (
 
         // Llamar al servicio específico de PayPal para crear la orden
         // El servicio PayPal recibirá las credenciales del cliente MXPaylink
+        // Se pasa finalCustomerEmail (que puede ser null/undefined) y el servicio decide cómo manejarlo
         const paymentResult = await paypalService.createOrder(
             customerPayPalCreds, // Las credenciales del cliente MXPaylink
             amount,
             concept,
             finalCustomerName,
-            finalCustomerEmail
+            finalCustomerEmail // <-- Pasamos el valor, aunque sea null/undefined
         );
 
         if (paymentResult && paymentResult.approvalUrl) {
@@ -65,7 +67,7 @@ const createFinalPaymentLinkForCustomer = async (
         }
 
     } catch (error) {
-        logger.error(`[SERVICE PAYMENT GENERATOR] Error al generar el link de pago para cliente final ${finalCustomerName} (${finalCustomerEmail}) solicitado por cliente ID ${customerId}:`, error.message);
+        logger.error(`[SERVICE PAYMENT GENERATOR] Error al generar el link de pago para cliente final ${finalCustomerName} (${finalCustomerEmail || 'No especificado'}) solicitado por cliente ID ${customerId}:`, error.message);
         // Opcional: Registrar el stack del error para diagnóstico más detallado
         // logger.error('Stack:', error.stack);
         return null;
