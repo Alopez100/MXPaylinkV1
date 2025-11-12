@@ -1,42 +1,57 @@
-// src/processors/messageProcessor.js
-// Responsabilidad: Determinar si 'from' está registrado.
-// Entrada: from, messageText.
+// src/services/messageProcessor.js
+// Responsabilidad: Procesar el mensaje recibido, determinar si el cliente es registrado o no y llamar al manejador correspondiente.
 // Lógica:
-//   - Consulta CustomerDB (un nuevo módulo simple para interactuar con la base de datos de clientes) por 'from'.
-//   - Si customer existe -> Llama a RegisteredHandler.
-//   - Si customer no existe -> Llama a UnregisteredHandler.
-// Siguiente Paso: Llama al handler correspondiente.
+//   - Recibe el número de teléfono 'from' y el texto del mensaje 'messageText'.
+//   - Normaliza el número de teléfono.
+//   - Busca al cliente en la base de datos usando el número normalizado.
+//   - Si lo encuentra y está activo, llama a registeredHandler.
+//   - Si no lo encuentra o no está activo, llama a unregisteredHandler.
 
+const { findCustomerByPhoneNumber } = require('./customerDB'); // Importamos la función de customerDB.js
+const { handleRegisteredCustomer } = require('./registeredHandler'); // Importamos el manejador para clientes registrados
+const { handleUnregisteredCustomer } = require('./unregisteredHandler'); // Importamos el manejador para clientes no registrados
 const logger = require('../utils/logger'); // Importamos el logger
-const customerDB = require('../services/customerDB'); // Importamos el módulo de acceso a la DB de clientes
-const unregisteredHandler = require('../handlers/unregisteredHandler'); // Importamos el handler para no registrados
-const registeredHandler = require('../handlers/registeredHandler'); // Importamos el handler para registrados
+const { normalizePhoneNumber } = require('../utils/phoneNormalizer'); // Importamos la función de normalización
 
-// Función principal para procesar el mensaje
+/**
+ * Procesa el mensaje entrante.
+ * @param {string} from - El número de teléfono del remitente.
+ * @param {string} messageText - El texto del mensaje recibido.
+ */
 const processMessage = async (from, messageText) => {
-    logger.info(`[MESSAGE PROCESSOR] Iniciando procesamiento para teléfono: ${from}`);
+  logger.info(`[MESSAGE PROCESSOR] Iniciando procesamiento para teléfono: ${from}`);
 
-    try {
-        // Buscar el cliente en la base de datos usando la función del módulo customerDB
-        const customer = await customerDB.findCustomerByPhoneNumber(from);
+  // 1. Normalizar el número de teléfono
+  const normalizedFrom = normalizePhoneNumber(from);
+  if (!normalizedFrom) {
+    logger.error(`[MESSAGE PROCESSOR] Número de teléfono inválido recibido y no se pudo normalizar: ${from}`);
+    // Opcional: Enviar un mensaje de error al cliente
+    return;
+  }
 
-        if (customer) {
-            logger.info(`[MESSAGE PROCESSOR] Cliente encontrado en DB: ${customer.phone}. ID: ${customer.id}`);
-            // Si el cliente existe, lo manejamos como un cliente registrado
-            await registeredHandler.handle(from, messageText, customer);
-        } else {
-            logger.info(`[MESSAGE PROCESSOR] Cliente NO encontrado en DB para teléfono: ${from}.`);
-            // Si el cliente no existe, lo manejamos como un cliente no registrado
-            await unregisteredHandler.handle(from, messageText);
-        }
-    } catch (error) {
-        // Captura errores generales durante la búsqueda o procesamiento
-        logger.error(`[MESSAGE PROCESSOR] Error al procesar el mensaje para ${from}:`, error.message);
-        // Opcional: Enviar un mensaje genérico de error al cliente
-        // await whatsappService.sendMessage(from, "Lo siento, hubo un error al procesar tu solicitud.");
+  logger.debug(`[MESSAGE PROCESSOR] Número original: ${from}, Número normalizado: ${normalizedFrom}`);
+
+  try {
+    // 2. Buscar al cliente en la base de datos usando el número normalizado
+    const customer = await findCustomerByPhoneNumber(normalizedFrom); // Se usa el número normalizado
+
+    if (customer && customer.service_status === 'activo') {
+      logger.info(`[MESSAGE PROCESSOR] Cliente encontrado y activo: ${normalizedFrom}. ID: ${customer.id}.`);
+      // 3. Si el cliente existe y está activo, llamar al manejador de clientes registrados
+      await handleRegisteredCustomer(customer, messageText, normalizedFrom); // Pasamos el número normalizado
+    } else {
+      logger.info(`[MESSAGE PROCESSOR] Cliente NO encontrado o no está activo para teléfono: ${normalizedFrom}.`);
+      // 4. Si no se encuentra o no está activo, llamar al manejador de clientes no registrados
+      await handleUnregisteredCustomer(messageText, normalizedFrom); // Pasamos el número normalizado
     }
+  } catch (error) {
+    // Captura errores generales durante la búsqueda o procesamiento
+    logger.error(`[MESSAGE PROCESSOR] Error al procesar el mensaje para ${normalizedFrom}:`, error.message);
+    // Opcional: Enviar un mensaje genérico de error al cliente
+    // await whatsappService.sendMessage(normalizedFrom, "Lo siento, hubo un error al procesar tu solicitud.");
+  }
 };
 
 module.exports = {
-    processMessage // Exportamos la función principal
+  processMessage // Exportamos la función principal
 };
