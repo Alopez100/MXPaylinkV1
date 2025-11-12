@@ -2,11 +2,13 @@
 // Responsabilidad: Interactuar con la base de datos de clientes PostgreSQL real para encontrar registros y desencriptar credenciales.
 // Lógica:
 //   - findCustomerByPhoneNumber: Busca un cliente por su número de teléfono en la base de datos real.
-//   - decrypt: Función para desencriptar cadenas usando crypto y la ENCRYPTION_KEY.
+//   - (La desencriptación ahora se delega a encryptionUtils.js)
 
 const { Pool } = require('pg'); // Importar Pool de pg
-const crypto = require('crypto'); // Importar crypto para desencriptación
+// --- ELIMINADO: const crypto = require('crypto'); // Ya no es necesario aquí ---
 const logger = require('../utils/logger'); // Importamos el logger
+// --- AÑADIDO: Importar la función de desencriptación ---
+const { decrypt } = require('../utils/encryptionUtils'); // Importamos la función de desencriptación desde el nuevo módulo
 
 // Obtener la cadena de conexión desde las variables de entorno
 // Usamos DATABASE_URL si está definida (como en Render) o construimos la URL manualmente
@@ -20,32 +22,8 @@ const pool = new Pool({
   ssl: process.env.DB_SSL_REQUIRED === 'true' ? { rejectUnauthorized: false } : false, // Configurar SSL según sea necesario
 });
 
-// Función de desencriptación (debe coincidir con la del sistema anterior)
-// Asume formato: "encryptedDataHex:ivHex"
-function decrypt(text) {
-  if (!text) return null; // Si no hay texto, no hay nada que desencriptar
-  const [encryptedDataHex, ivHex] = text.split(':');
-  if (!encryptedDataHex || !ivHex) {
-    logger.warn('[CUSTOMER DB] Formato de texto encriptado inválido, no se puede desencriptar:', text);
-    return null;
-  }
-
-  try {
-    const encryptedBuffer = Buffer.from(encryptedDataHex, 'hex');
-    const ivBuffer = Buffer.from(ivHex, 'hex');
-
-    const decipher = crypto.createDecipher('aes-256-cbc', process.env.ENCRYPTION_KEY);
-    decipher.setAutoPadding(true); // Asegura que el padding se maneje automáticamente
-
-    let decrypted = decipher.update(encryptedBuffer);
-    decrypted = Buffer.concat([decrypted, decipher.final()]);
-
-    return decrypted.toString('utf8');
-  } catch (error) {
-    logger.error(`[CUSTOMER DB] Error al desencriptar texto: ${error.message}`, { original_error: error });
-    return null; // Devolver null si falla la desencriptación
-  }
-}
+// --- ELIMINADO: La función decrypt anterior ---
+// function decrypt(text) { ... }
 
 
 /**
