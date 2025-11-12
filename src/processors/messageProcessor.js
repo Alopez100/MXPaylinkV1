@@ -7,8 +7,10 @@
 //   - Si lo encuentra y está activo, llama a registeredHandler.
 //   - Si no lo encuentra o no está activo, llama a unregisteredHandler.
 
-const { findCustomerByPhoneNumber } = require('../services/customerDB'); // CORREGIDO: Ruta relativa a services/customerDB.js
-const { handleRegisteredCustomer } = require('../handlers/registeredHandler'); // CORREGIDO: Ruta relativa a handlers/registeredHandler.js
+// --- CORREGIDO: Rutas relativas a handlers/ ---
+const { findCustomerByPhoneNumber } = require('../services/customerDB'); // CORRECTO: Ruta relativa a services/customerDB.js
+// --- CORREGIDO: Cambiado el nombre de la función importada de 'handleRegisteredCustomer' a 'handlePaymentRequest' ---
+const { handlePaymentRequest } = require('../handlers/registeredHandler'); // CORREGIDO: Ruta relativa a handlers/registeredHandler.js
 const { handleUnregisteredCustomer } = require('../handlers/unregisteredHandler'); // CORREGIDO: Ruta relativa a handlers/unregisteredHandler.js
 const logger = require('../utils/logger'); // Importamos el logger
 const { normalizePhoneNumber } = require('../utils/phoneNormalizer'); // Importamos la función de normalización
@@ -38,7 +40,8 @@ const processMessage = async (from, messageText) => {
     if (customer && customer.service_status === 'activo') {
       logger.info(`[MESSAGE PROCESSOR] Cliente encontrado y activo: ${normalizedFrom}. ID: ${customer.id}.`);
       // 3. Si el cliente existe y está activo, llamar al manejador de clientes registrados
-      await handleRegisteredCustomer(customer, messageText, normalizedFrom); // Pasamos el número normalizado
+      // --- CORREGIDO: Llamar a la función correcta 'handlePaymentRequest' ---
+      await handlePaymentRequest(customer, messageText, normalizedFrom); // Pasamos el número normalizado
     } else {
       logger.info(`[MESSAGE PROCESSOR] Cliente NO encontrado o no está activo para teléfono: ${normalizedFrom}.`);
       // 4. Si no se encuentra o no está activo, llamar al manejador de clientes no registrados
