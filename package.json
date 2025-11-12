@@ -1,14 +1,16 @@
 {
   "name": "mxpaylinkv1",
   "version": "1.0.0",
-  "description": "Reconstrucción del sistema MXPaylink desde cero con un enfoque modular y simplificado.",
+  "description": "Reconstrucci?n del sistema MXPaylink desde cero con un enfoque modular y simplificado.",
   "main": "app.js",
   "scripts": {
     "start": "node app.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "axios": "^1.6.0"
+    "axios": "^1.6.0",
+    "pg": "^8.11.3",      // <-- Agregamos pg
+    "openai": "^4.24.7"  // <-- Agregamos openai (usa la última versión compatible)
   },
   "engines": {
     "node": "22.16.0"
