@@ -9,8 +9,8 @@
   "dependencies": {
     "express": "^4.18.2",
     "axios": "^1.6.0",
-    "pg": "^8.11.3",      // <-- Agregamos pg
-    "openai": "^4.24.7"  // <-- Agregamos openai (usa la última versión compatible)
+    "pg": "^8.11.3",
+    "openai": "^4.24.7"
   },
   "engines": {
     "node": "22.16.0"
