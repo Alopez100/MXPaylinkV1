@@ -9,43 +9,23 @@
 
 // --- CORREGIDO: Rutas relativas a handlers/ ---
 const { findCustomerByPhoneNumber } = require('../services/customerDB'); // CORRECTO: Ruta relativa a services/customerDB.js
+// --- CORREGIDO: Cambiado el nombre de la función importada a 'handle' (nombre con el que se exporta en V1 registeredHandler.js) ---
+const { handle } = require('../handlers/registeredHandler'); // CORREGIDO: Ruta relativa a handlers/registeredHandler.js, importa 'handle'
 const { handleUnregisteredCustomer } = require('../handlers/unregisteredHandler'); // CORRECTO: Ruta relativa a handlers/unregisteredHandler.js
 const logger = require('../utils/logger'); // Importamos el logger
 const { normalizePhoneNumber } = require('../utils/phoneNormalizer'); // Importamos la función de normalización
 
-// --- DIAGNÓSTICO: Importar todo el módulo registeredHandler y ver su contenido ---
-const registeredHandlerModule = require('../handlers/registeredHandler');
-logger.info('[MESSAGE PROCESSOR] Contenido completo del módulo registeredHandler:', JSON.stringify(registeredHandlerModule, null, 2));
-// Intentar importar una función específica que creemos que existe (por ejemplo, handleRegisteredCustomer)
-let handleRegisteredCustomer = registeredHandlerModule.handleRegisteredCustomer;
-let handlePaymentRequest = registeredHandlerModule.handlePaymentRequest;
-
-// Mostrar qué funciones se pudieron asignar
-if (handleRegisteredCustomer) {
-  logger.info('[MESSAGE PROCESSOR] handleRegisteredCustomer está disponible para usar.');
-} else {
-  logger.warn('[MESSAGE PROCESSOR] handleRegisteredCustomer NO está disponible en registeredHandlerModule.');
-}
-
-if (handlePaymentRequest) {
-  logger.info('[MESSAGE PROCESSOR] handlePaymentRequest está disponible para usar.');
-} else {
-  logger.warn('[MESSAGE PROCESSOR] handlePaymentRequest NO está disponible en registeredHandlerModule.');
-}
-
-// Seleccionar la función correcta para usar (esta lógica se eliminará después de identificar la correcta)
-let selectedFunction = null;
-if (handleRegisteredCustomer) {
-  selectedFunction = handleRegisteredCustomer;
-  logger.info('[MESSAGE PROCESSOR] Seleccionando handleRegisteredCustomer para usar.');
-} else if (handlePaymentRequest) {
-  selectedFunction = handlePaymentRequest;
-  logger.info('[MESSAGE PROCESSOR] Seleccionando handlePaymentRequest para usar.');
-} else {
-  logger.error('[MESSAGE PROCESSOR] ¡ERROR CRÍTICO! Ninguna función reconocida está disponible en registeredHandlerModule.');
-  // Opcional: lanzar un error o manejar el caso de que no haya función disponible
-  // throw new Error("No se encontró una función válida para manejar clientes registrados.");
-}
+// --- ELIMINADO: Logs de diagnóstico ---
+// const registeredHandlerModule = require('../handlers/registeredHandler');
+// logger.info('[MESSAGE PROCESSOR] Contenido completo del módulo registeredHandler:', JSON.stringify(registeredHandlerModule, null, 2));
+// let handleRegisteredCustomer = registeredHandlerModule.handleRegisteredCustomer;
+// let handlePaymentRequest = registeredHandlerModule.handlePaymentRequest;
+// if (handleRegisteredCustomer) { ... }
+// if (handlePaymentRequest) { ... }
+// let selectedFunction = null;
+// if (handleRegisteredCustomer) { ... }
+// else if (handlePaymentRequest) { ... }
+// else { ... }
 
 /**
  * Procesa el mensaje entrante.
@@ -72,14 +52,9 @@ const processMessage = async (from, messageText) => {
     if (customer && customer.service_status === 'activo') {
       logger.info(`[MESSAGE PROCESSOR] Cliente encontrado y activo: ${normalizedFrom}. ID: ${customer.id}.`);
       // 3. Si el cliente existe y está activo, llamar al manejador de clientes registrados
-      // --- CORREGIDO: Usar la función seleccionada ---
-      if (selectedFunction) {
-        await selectedFunction(customer, messageText, normalizedFrom); // Pasamos el número normalizado
-      } else {
-         logger.error(`[MESSAGE PROCESSOR] No se pudo llamar al manejador para cliente ${normalizedFrom}. No se encontró una función válida.`);
-         // Opcional: Enviar un mensaje de error al cliente
-         // await whatsappService.sendMessage(normalizedFrom, "Lo siento, hubo un error interno al procesar tu solicitud.");
-      }
+      // --- CORREGIDO: Usar la función 'handle' importada ---
+      // PASAMOS normalizedFrom, messageText y customer como parámetros
+      await handle(normalizedFrom, messageText, customer); // Pasamos el número normalizado, el mensaje y el objeto cliente
     } else {
       logger.info(`[MESSAGE PROCESSOR] Cliente NO encontrado o no está activo para teléfono: ${normalizedFrom}.`);
       // 4. Si no se encuentra o no está activo, llamar al manejador de clientes no registrados
