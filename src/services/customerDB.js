@@ -1,53 +1,150 @@
 // src/services/customerDB.js
-// Responsabilidad: Interactuar con la base de datos de clientes para encontrar registros.
-// Este módulo actúa como una interfaz simple para consultas de clientes.
+// Responsabilidad: Interactuar con la base de datos de clientes PostgreSQL real para encontrar registros y desencriptar credenciales.
 // Lógica:
-//   - findCustomerByPhoneNumber: Busca un cliente por su número de teléfono.
+//   - findCustomerByPhoneNumber: Busca un cliente por su número de teléfono en la base de datos real.
+//   - decrypt: Función para desencriptar cadenas usando crypto y la ENCRYPTION_KEY.
 
+const { Pool } = require('pg'); // Importar Pool de pg
+const crypto = require('crypto'); // Importar crypto para desencriptación
 const logger = require('../utils/logger'); // Importamos el logger
 
-// Simulación de base de datos local (solo para pruebas iniciales)
-// En una implementación real, aquí se usaría Sequelize o una librería de base de datos.
-const mockDatabase = {
-    // Ejemplo de cliente activo
-    '5213311296199': {
-        id: 1,
-        phone: '5213311296199', // Número de ejemplo
-        email: 'clienteactivo@example.com',
-        service_status: 'activo', // o 'vencido', 'suspendido'
-        paypal_creds: { client_id: 'fake_client_id', secret: 'fake_secret' }, // Credenciales simuladas
-        created_at: new Date(),
-        updated_at: new Date()
-    }
-    // Agrega más clientes simulados aquí si es necesario para pruebas
-    // 'otro_numero': { ... },
-};
+// Obtener la cadena de conexión desde las variables de entorno
+// Usamos DATABASE_URL si está definida (como en Render) o construimos la URL manualmente
+// En Render, DATABASE_URL suele estar disponible y es preferible.
+const connectionString = process.env.DATABASE_URL || `postgresql://${process.env.DB_USER}:${process.env.DB_PASS}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`;
+
+// Configurar el pool de conexiones
+// Es importante usar SSL para conexiones a Render
+const pool = new Pool({
+  connectionString: connectionString,
+  ssl: process.env.DB_SSL_REQUIRED === 'true' ? { rejectUnauthorized: false } : false, // Configurar SSL según sea necesario
+});
+
+// Función de desencriptación (debe coincidir con la del sistema anterior)
+// Asume formato: "encryptedDataHex:ivHex"
+function decrypt(text) {
+  if (!text) return null; // Si no hay texto, no hay nada que desencriptar
+  const [encryptedDataHex, ivHex] = text.split(':');
+  if (!encryptedDataHex || !ivHex) {
+    logger.warn('[CUSTOMER DB] Formato de texto encriptado inválido, no se puede desencriptar:', text);
+    return null;
+  }
+
+  try {
+    const encryptedBuffer = Buffer.from(encryptedDataHex, 'hex');
+    const ivBuffer = Buffer.from(ivHex, 'hex');
+
+    const decipher = crypto.createDecipher('aes-256-cbc', process.env.ENCRYPTION_KEY);
+    decipher.setAutoPadding(true); // Asegura que el padding se maneje automáticamente
+
+    let decrypted = decipher.update(encryptedBuffer);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+
+    return decrypted.toString('utf8');
+  } catch (error) {
+    logger.error(`[CUSTOMER DB] Error al desencriptar texto: ${error.message}`, { original_error: error });
+    return null; // Devolver null si falla la desencriptación
+  }
+}
+
 
 /**
- * Busca un cliente en la base de datos por su número de teléfono.
+ * Busca un cliente en la base de datos PostgreSQL por su número de teléfono.
  * @param {string} phoneNumber - El número de teléfono a buscar.
- * @returns {Object|null} - El objeto cliente si se encuentra, o null si no.
+ * @returns {Promise<Object|null>} - El objeto cliente si se encuentra y se desencriptan las credenciales correctamente, o null si no.
  */
 const findCustomerByPhoneNumber = async (phoneNumber) => {
-    logger.debug(`[CUSTOMER DB] Buscando cliente con teléfono: ${phoneNumber} en la base de datos.`);
+  logger.debug(`[CUSTOMER DB] Buscando cliente con teléfono: ${phoneNumber} en la base de datos real.`);
 
-    // Simula una operación asincrónica (por ejemplo, una consulta a la base de datos)
-    await new Promise(resolve => setTimeout(resolve, 10));
+  const client = await pool.connect(); // Obtener un cliente del pool
+  try {
+    // Consulta SQL para buscar al cliente
+    const query = 'SELECT id, phone, email, service_status, paypal_creds, conekta_creds, mercadopago_creds FROM clients WHERE phone = $1';
+    const values = [phoneNumber];
+    const result = await client.query(query, values);
 
-    // Busca en la "base de datos simulada"
-    const customer = mockDatabase[phoneNumber] || null;
+    if (result.rows.length > 0) {
+      let customer = result.rows[0];
+      logger.info(`[CUSTOMER DB] Cliente encontrado en DB: ${customer.phone}. ID: ${customer.id}`);
 
-    if (customer) {
-        logger.info(`[CUSTOMER DB] Cliente encontrado para teléfono: ${phoneNumber}. ID: ${customer.id}`);
-        // En una implementación real, aquí se devolvería el modelo de Sequelize o un objeto mapeado.
-        // Devolvemos una copia para evitar modificaciones accidentales del mock.
-        return { ...customer };
+      // Desencriptar las credenciales almacenadas
+      // Asumiendo que paypal_creds, conekta_creds, mercadopago_creds son JSON encriptados como cadenas
+      // El sistema anterior las almacenaba como JSON.stringify(encrypt({client_id, secret}))
+
+      // Desencriptar PayPal
+      if (customer.paypal_creds) {
+        try {
+          const decryptedPayPalCredsString = decrypt(customer.paypal_creds);
+          if (decryptedPayPalCredsString) {
+            customer.paypal_creds = JSON.parse(decryptedPayPalCredsString);
+            logger.debug(`[CUSTOMER DB] Credenciales PayPal desencriptadas para cliente ${customer.id}.`);
+          } else {
+             logger.error(`[CUSTOMER DB] No se pudo desencriptar las credenciales PayPal para cliente ${customer.id}. Valor en DB: ${customer.paypal_creds}`);
+             customer.paypal_creds = null; // Indicar que falló la desencriptación
+          }
+        } catch (parseError) {
+          logger.error(`[CUSTOMER DB] Error al parsear las credenciales PayPal desencriptadas para cliente ${customer.id}:`, parseError.message);
+          customer.paypal_creds = null; // Indicar que falló la desencriptación o el parseo
+        }
+      } else {
+        logger.debug(`[CUSTOMER DB] Cliente ${customer.id} no tiene credenciales PayPal almacenadas.`);
+        customer.paypal_creds = null;
+      }
+
+      // Desencriptar Conekta (opcional, ejemplo similar)
+      if (customer.conekta_creds) {
+        try {
+          const decryptedConektaCredsString = decrypt(customer.conekta_creds);
+          if (decryptedConektaCredsString) {
+            customer.conekta_creds = JSON.parse(decryptedConektaCredsString);
+            logger.debug(`[CUSTOMER DB] Credenciales Conekta desencriptadas para cliente ${customer.id}.`);
+          } else {
+             logger.error(`[CUSTOMER DB] No se pudo desencriptar las credenciales Conekta para cliente ${customer.id}.`);
+             customer.conekta_creds = null;
+          }
+        } catch (parseError) {
+          logger.error(`[CUSTOMER DB] Error al parsear las credenciales Conekta desencriptadas para cliente ${customer.id}:`, parseError.message);
+          customer.conekta_creds = null;
+        }
+      } else {
+        logger.debug(`[CUSTOMER DB] Cliente ${customer.id} no tiene credenciales Conekta almacenadas.`);
+        customer.conekta_creds = null;
+      }
+
+      // Desencriptar MercadoPago (opcional, ejemplo similar)
+      if (customer.mercadopago_creds) {
+        try {
+          const decryptedMercadoPagoCredsString = decrypt(customer.mercadopago_creds);
+          if (decryptedMercadoPagoCredsString) {
+            customer.mercadopago_creds = JSON.parse(decryptedMercadoPagoCredsString);
+            logger.debug(`[CUSTOMER DB] Credenciales MercadoPago desencriptadas para cliente ${customer.id}.`);
+          } else {
+             logger.error(`[CUSTOMER DB] No se pudo desencriptar las credenciales MercadoPago para cliente ${customer.id}.`);
+             customer.mercadopago_creds = null;
+          }
+        } catch (parseError) {
+          logger.error(`[CUSTOMER DB] Error al parsear las credenciales MercadoPago desencriptadas para cliente ${customer.id}:`, parseError.message);
+          customer.mercadopago_creds = null;
+        }
+      } else {
+        logger.debug(`[CUSTOMER DB] Cliente ${customer.id} no tiene credenciales MercadoPago almacenadas.`);
+        customer.mercadopago_creds = null;
+      }
+
+      // Devolver el cliente con las credenciales ya desencriptadas y parseadas
+      return customer;
     } else {
-        logger.info(`[CUSTOMER DB] Cliente NO encontrado para teléfono: ${phoneNumber}.`);
-        return null;
+      logger.info(`[CUSTOMER DB] Cliente NO encontrado para teléfono: ${phoneNumber}.`);
+      return null;
     }
+  } catch (error) {
+    logger.error(`[CUSTOMER DB] Error al buscar cliente en la base de datos:`, error.message);
+    throw error; // Re-lanzar el error para que el módulo superior lo maneje
+  } finally {
+    client.release(); // Siempre liberar el cliente del pool
+  }
 };
 
 module.exports = {
-    findCustomerByPhoneNumber // Exportamos la función de búsqueda
+  findCustomerByPhoneNumber // Exportamos la función de búsqueda
 };
