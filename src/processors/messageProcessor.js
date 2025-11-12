@@ -1,4 +1,4 @@
-// src/services/messageProcessor.js
+// src/processors/messageProcessor.js
 // Responsabilidad: Procesar el mensaje recibido, determinar si el cliente es registrado o no y llamar al manejador correspondiente.
 // Lógica:
 //   - Recibe el número de teléfono 'from' y el texto del mensaje 'messageText'.
@@ -7,9 +7,9 @@
 //   - Si lo encuentra y está activo, llama a registeredHandler.
 //   - Si no lo encuentra o no está activo, llama a unregisteredHandler.
 
-const { findCustomerByPhoneNumber } = require('./customerDB'); // Importamos la función de customerDB.js
-const { handleRegisteredCustomer } = require('./registeredHandler'); // Importamos el manejador para clientes registrados
-const { handleUnregisteredCustomer } = require('./unregisteredHandler'); // Importamos el manejador para clientes no registrados
+const { findCustomerByPhoneNumber } = require('../services/customerDB'); // CORREGIDO: Ruta relativa a services/customerDB.js
+const { handleRegisteredCustomer } = require('../handlers/registeredHandler'); // CORREGIDO: Ruta relativa a handlers/registeredHandler.js
+const { handleUnregisteredCustomer } = require('../handlers/unregisteredHandler'); // CORREGIDO: Ruta relativa a handlers/unregisteredHandler.js
 const logger = require('../utils/logger'); // Importamos el logger
 const { normalizePhoneNumber } = require('../utils/phoneNormalizer'); // Importamos la función de normalización
 
