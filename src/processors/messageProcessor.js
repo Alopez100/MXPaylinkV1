@@ -9,8 +9,8 @@
 
 // --- CORREGIDO: Rutas relativas a handlers/ ---
 const { findCustomerByPhoneNumber } = require('../services/customerDB'); // CORRECTO: Ruta relativa a services/customerDB.js
-// --- CORREGIDO: Cambiado el nombre de la función importada a 'handlePaymentRequest' (nombre correcto con el que se exporta en V1 registeredHandler.js) ---
-const { handlePaymentRequest } = require('../handlers/registeredHandler'); // CORREGIDO: Ruta relativa a handlers/registeredHandler.js
+// --- CORREGIDO: Cambiado el nombre de la función importada a 'handleRegisteredCustomer' (nombre correcto con el que se exporta en V1 registeredHandler.js) ---
+const { handleRegisteredCustomer } = require('../handlers/registeredHandler'); // CORREGIDO: Ruta relativa a handlers/registeredHandler.js
 const { handleUnregisteredCustomer } = require('../handlers/unregisteredHandler'); // CORREGIDO: Ruta relativa a handlers/unregisteredHandler.js
 const logger = require('../utils/logger'); // Importamos el logger
 const { normalizePhoneNumber } = require('../utils/phoneNormalizer'); // Importamos la función de normalización
@@ -40,8 +40,8 @@ const processMessage = async (from, messageText) => {
     if (customer && customer.service_status === 'activo') {
       logger.info(`[MESSAGE PROCESSOR] Cliente encontrado y activo: ${normalizedFrom}. ID: ${customer.id}.`);
       // 3. Si el cliente existe y está activo, llamar al manejador de clientes registrados
-      // --- CORREGIDO: Llamar a la función correcta 'handlePaymentRequest' (nombre correcto con el que se exporta en V1 registeredHandler.js) ---
-      await handlePaymentRequest(customer, messageText, normalizedFrom); // Pasamos el número normalizado
+      // --- CORREGIDO: Llamar a la función correcta 'handleRegisteredCustomer' (nombre correcto con el que se exporta en V1 registeredHandler.js) ---
+      await handleRegisteredCustomer(customer, messageText, normalizedFrom); // Pasamos el número normalizado
     } else {
       logger.info(`[MESSAGE PROCESSOR] Cliente NO encontrado o no está activo para teléfono: ${normalizedFrom}.`);
       // 4. Si no se encuentra o no está activo, llamar al manejador de clientes no registrados
