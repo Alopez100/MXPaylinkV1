@@ -51,9 +51,11 @@ function encrypt(text) {
 
   try {
     const iv = crypto.randomBytes(16); // Vector de inicialización
-    const cipher = crypto.createCipher('aes-256-cbc', ENCRYPTION_KEY); // Usar createCipher (obsoleto pero puede funcionar si el formato es antiguo)
-    // Opcional: usar createCipheriv en su lugar si se cambia el sistema de encriptación
-    // const cipher = crypto.createCipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
+    // --- CORREGIDO: Usar createCipheriv en lugar de createCipher ---
+    const cipher = crypto.createCipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
+    // IMPORTANTE: Si el sistema anterior usaba padding automático (que es el padrón para CBC),
+    // debemos asegurarlo aquí también.
+    cipher.setAutoPadding(true);
 
     let encrypted = cipher.update(text, 'utf8', 'hex');
     encrypted += cipher.final('hex');
@@ -96,10 +98,10 @@ function decrypt(encryptedText) {
     const iv = Buffer.from(ivHex, 'hex'); // Convertir IV de hexadecimal a Buffer
     const encryptedBuffer = Buffer.from(encryptedHex, 'hex'); // Convertir datos encriptados de hexadecimal a Buffer
 
-    // Crear el decipher usando el IV extraído
-    const decipher = crypto.createDecipher('aes-256-cbc', ENCRYPTION_KEY); // Usar createDecipher (obsoleto)
-    // Opcional: usar createDecipheriv en su lugar si se cambia el sistema de encriptación
-    // const decipher = crypto.createDecipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
+    // --- CORREGIDO: Crear el decipher usando createDecipheriv ---
+    const decipher = crypto.createDecipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
+    // Asegurar que el padding se maneje (debe coincidir con el usado en encriptar)
+    decipher.setAutoPadding(true);
 
     // Actualizar el buffer de datos desencriptados
     let decrypted = decipher.update(encryptedBuffer);
