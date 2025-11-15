@@ -45,17 +45,36 @@ const findCustomerByPhoneNumber = async (phoneNumber) => {
       let customer = result.rows[0];
       logger.info(`[CUSTOMER DB] Cliente encontrado en DB: ${customer.phone}. ID: ${customer.id}`);
 
+      // --- LOG DE DIAGNÓSTICO 1: Información básica antes de desencriptar ---
+      logger.debug(`[CUSTOMER DB] Cliente encontrado en DB para ${phoneNumber}:`, {
+        tienePaypalCreds: !!customer.paypal_creds, // Muestra true o false
+        tipoPaypalCreds: typeof customer.paypal_creds, // Muestra 'string', 'object', etc.
+        longitudCadenaEncriptada: typeof customer.paypal_creds === 'string' ? customer.paypal_creds.length : 'No es string' // Muestra la longitud si es string
+        // No se loguea el valor directo de customer.paypal_creds
+      });
+
       // Desencriptar las credenciales almacenadas
       // Asumiendo que paypal_creds, conekta_creds, mercadopago_creds son JSON encriptados como cadenas
       // El sistema anterior las almacenaba como JSON.stringify(encrypt({client_id, secret}))
 
       // Desencriptar PayPal
       if (customer.paypal_creds) {
+        // --- LOG DE DIAGNÓSTICO 2: Información antes de llamar a decrypt ---
+        logger.debug(`[CUSTOMER DB] Llamando a decrypt para cliente ${customer.id}. Valor a desencriptar (longitud):`, customer.paypal_creds.length);
+
         try {
           const decryptedPayPalCredsString = decrypt(customer.paypal_creds);
+
+          // --- LOG DE DIAGNÓSTICO 3: Resultado de la función decrypt ---
+          logger.debug(`[CUSTOMER DB] Resultado de decrypt para cliente ${customer.id}:`, {
+            tipoResultado: typeof decryptedPayPalCredsString, // 'string', 'object', 'null', etc.
+            tieneContenido: typeof decryptedPayPalCredsString === 'string' && decryptedPayPalCredsString.length > 0, // true si es string con contenido
+            longitudResultado: typeof decryptedPayPalCredsString === 'string' ? decryptedPayPalCredsString.length : 'No es string valido'
+          });
+
           if (decryptedPayPalCredsString) {
             customer.paypal_creds = JSON.parse(decryptedPayPalCredsString);
-            logger.debug(`[CUSTOMER DB] Credenciales PayPal desencriptadas para cliente ${customer.id}.`);
+            logger.debug(`[CUSTOMER DB] Credenciales PayPal desencriptadas y parseadas para cliente ${customer.id}.`);
           } else {
              logger.error(`[CUSTOMER DB] No se pudo desencriptar las credenciales PayPal para cliente ${customer.id}. Valor en DB: ${customer.paypal_creds}`);
              customer.paypal_creds = null; // Indicar que falló la desencriptación
@@ -71,8 +90,15 @@ const findCustomerByPhoneNumber = async (phoneNumber) => {
 
       // Desencriptar Conekta (opcional, ejemplo similar)
       if (customer.conekta_creds) {
+        logger.debug(`[CUSTOMER DB] Llamando a decrypt para credenciales Conekta cliente ${customer.id}. Valor a desencriptar (longitud):`, customer.conekta_creds.length);
         try {
           const decryptedConektaCredsString = decrypt(customer.conekta_creds);
+          logger.debug(`[CUSTOMER DB] Resultado de decrypt Conekta para cliente ${customer.id}:`, {
+            tipoResultado: typeof decryptedConektaCredsString,
+            tieneContenido: typeof decryptedConektaCredsString === 'string' && decryptedConektaCredsString.length > 0,
+            longitudResultado: typeof decryptedConektaCredsString === 'string' ? decryptedConektaCredsString.length : 'No es string valido'
+          });
+
           if (decryptedConektaCredsString) {
             customer.conekta_creds = JSON.parse(decryptedConektaCredsString);
             logger.debug(`[CUSTOMER DB] Credenciales Conekta desencriptadas para cliente ${customer.id}.`);
@@ -91,8 +117,15 @@ const findCustomerByPhoneNumber = async (phoneNumber) => {
 
       // Desencriptar MercadoPago (opcional, ejemplo similar)
       if (customer.mercadopago_creds) {
+        logger.debug(`[CUSTOMER DB] Llamando a decrypt para credenciales MercadoPago cliente ${customer.id}. Valor a desencriptar (longitud):`, customer.mercadopago_creds.length);
         try {
           const decryptedMercadoPagoCredsString = decrypt(customer.mercadopago_creds);
+          logger.debug(`[CUSTOMER DB] Resultado de decrypt MercadoPago para cliente ${customer.id}:`, {
+            tipoResultado: typeof decryptedMercadoPagoCredsString,
+            tieneContenido: typeof decryptedMercadoPagoCredsString === 'string' && decryptedMercadoPagoCredsString.length > 0,
+            longitudResultado: typeof decryptedMercadoPagoCredsString === 'string' ? decryptedMercadoPagoCredsString.length : 'No es string valido'
+          });
+
           if (decryptedMercadoPagoCredsString) {
             customer.mercadopago_creds = JSON.parse(decryptedMercadoPagoCredsString);
             logger.debug(`[CUSTOMER DB] Credenciales MercadoPago desencriptadas para cliente ${customer.id}.`);
