@@ -1,30 +1,40 @@
 // src/services/customerDB.js
 // Responsabilidad: Interactuar con la base de datos de clientes PostgreSQL real para encontrar registros y desencriptar credenciales.
-// Lógica:
+// Lógica (Actualizada para manejar formatos antiguos y nuevos):
 //   - findCustomerByPhoneNumber: Busca un cliente por su número de teléfono en la base de datos real.
+//   - Desencripta y convierte credenciales almacenadas (PayPal, Conekta, MP) al formato { client_id, secret } o equivalente.
 //   - (La desencriptación ahora se delega a encryptionUtils.js)
 
 const { Pool } = require('pg'); // Importar Pool de pg
-// --- ELIMINADO: const crypto = require('crypto'); // Ya no es necesario aquí ---
 const logger = require('../utils/logger'); // Importamos el logger
-// --- AÑADIDO: Importar la función de desencriptación ---
 const { decrypt } = require('../utils/encryptionUtils'); // Importamos la función de desencriptación desde el nuevo módulo
 
 // Obtener la cadena de conexión desde las variables de entorno
-// Usamos DATABASE_URL si está definida (como en Render) o construimos la URL manualmente
-// En Render, DATABASE_URL suele estar disponible y es preferible.
 const connectionString = process.env.DATABASE_URL || `postgresql://${process.env.DB_USER}:${process.env.DB_PASS}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`;
 
 // Configurar el pool de conexiones
-// Es importante usar SSL para conexiones a Render
 const pool = new Pool({
   connectionString: connectionString,
-  ssl: process.env.DB_SSL_REQUIRED === 'true' ? { rejectUnauthorized: false } : false, // Configurar SSL según sea necesario
+  ssl: process.env.DB_SSL_REQUIRED === 'true' ? { rejectUnauthorized: false } : false,
 });
 
-// --- ELIMINADO: La función decrypt anterior ---
-// function decrypt(text) { ... }
-
+/**
+ * Convierte una cadena en formato 'client_id:secret' a un objeto { client_id, secret }.
+ * @param {string} credsString - La cadena a convertir.
+ * @returns {Object|null} - El objeto { client_id, secret } o null si el formato es incorrecto.
+ */
+function convertFromLegacyFormat(credsString) {
+  if (typeof credsString === 'string' && credsString.includes(':')) {
+    const parts = credsString.split(':');
+    if (parts.length === 2) {
+      return {
+        client_id: parts[0],
+        secret: parts[1]
+      };
+    }
+  }
+  return null;
+}
 
 /**
  * Busca un cliente en la base de datos PostgreSQL por su número de teléfono.
@@ -36,7 +46,6 @@ const findCustomerByPhoneNumber = async (phoneNumber) => {
 
   const client = await pool.connect(); // Obtener un cliente del pool
   try {
-    // Consulta SQL para buscar al cliente
     const query = 'SELECT id, phone, email, service_status, paypal_creds, conekta_creds, mercadopago_creds FROM clients WHERE phone = $1';
     const values = [phoneNumber];
     const result = await client.query(query, values);
@@ -45,53 +54,51 @@ const findCustomerByPhoneNumber = async (phoneNumber) => {
       let customer = result.rows[0];
       logger.info(`[CUSTOMER DB] Cliente encontrado en DB: ${customer.phone}. ID: ${customer.id}`);
 
-      // --- LOG DE DIAGNÓSTICO 1: Información básica antes de desencriptar ---
-      logger.debug(`[CUSTOMER DB] Cliente encontrado en DB para ${phoneNumber}:`, {
-        tienePaypalCreds: !!customer.paypal_creds, // Muestra true o false
-        tipoPaypalCreds: typeof customer.paypal_creds, // Muestra 'string', 'object', etc.
-        longitudCadenaEncriptada: typeof customer.paypal_creds === 'string' ? customer.paypal_creds.length : 'No es string' // Muestra la longitud si es string
-        // No se loguea el valor directo de customer.paypal_creds
-      });
-
-      // Desencriptar las credenciales almacenadas
-      // Asumiendo que paypal_creds, conekta_creds, mercadopago_creds son JSON encriptados como cadenas
-      // El sistema anterior las almacenaba como JSON.stringify(encrypt({client_id, secret}))
-
-      // Desencriptar PayPal
+      // --- Desencriptar y procesar credenciales PayPal ---
       if (customer.paypal_creds) {
-        // --- LOG DE DIAGNÓSTICO 2: Información antes de llamar a decrypt ---
-        logger.debug(`[CUSTOMER DB] Llamando a decrypt para cliente ${customer.id}. Valor a desencriptar (longitud):`, customer.paypal_creds.length);
-
+        logger.debug(`[CUSTOMER DB] Llamando a decrypt para credenciales PayPal cliente ${customer.id}. Valor a desencriptar (longitud):`, customer.paypal_creds.length);
         try {
           const decryptedPayPalCredsString = decrypt(customer.paypal_creds);
-
-          // --- LOG DE DIAGNÓSTICO 3: Resultado de la función decrypt ---
-          logger.debug(`[CUSTOMER DB] Resultado de decrypt para cliente ${customer.id}:`, {
-            tipoResultado: typeof decryptedPayPalCredsString, // 'string', 'object', 'null', etc.
-            tieneContenido: typeof decryptedPayPalCredsString === 'string' && decryptedPayPalCredsString.length > 0, // true si es string con contenido
+          logger.debug(`[CUSTOMER DB] Resultado de decrypt PayPal para cliente ${customer.id}:`, {
+            tipoResultado: typeof decryptedPayPalCredsString,
+            tieneContenido: typeof decryptedPayPalCredsString === 'string' && decryptedPayPalCredsString.length > 0,
             longitudResultado: typeof decryptedPayPalCredsString === 'string' ? decryptedPayPalCredsString.length : 'No es string valido'
           });
 
           if (decryptedPayPalCredsString) {
-            customer.paypal_creds = JSON.parse(decryptedPayPalCredsString);
-            // --- LOG DE DIAGNÓSTICO 4: Contenido del objeto parseado (clave para resolver el problema) ---
-            logger.debug(`[CUSTOMER DB] OBJETO PARSEADO de credenciales PayPal para cliente ${customer.id}:`, customer.paypal_creds);
-
-            logger.debug(`[CUSTOMER DB] Credenciales PayPal desencriptadas y parseadas para cliente ${customer.id}.`);
+            let parsedCreds = null;
+            // Intentar parsear como JSON
+            try {
+              parsedCreds = JSON.parse(decryptedPayPalCredsString);
+              logger.debug(`[CUSTOMER DB] Credenciales PayPal desencriptadas y parseadas como JSON para cliente ${customer.id}.`);
+            } catch (jsonParseError) {
+              logger.warn(`[CUSTOMER DB] Error al parsear credenciales PayPal como JSON para cliente ${customer.id}:`, jsonParseError.message);
+              logger.debug(`[CUSTOMER DB] Intentando formato legacy 'client_id:secret' para cliente ${customer.id}.`);
+              // Si falla el parseo JSON, intentar formato legacy
+              parsedCreds = convertFromLegacyFormat(decryptedPayPalCredsString);
+              if (parsedCreds) {
+                logger.info(`[CUSTOMER DB] Credenciales PayPal convertidas desde formato legacy para cliente ${customer.id}.`);
+              } else {
+                logger.error(`[CUSTOMER DB] No se pudo interpretar las credenciales PayPal desencriptadas para cliente ${customer.id}. Formato no válido.`);
+                customer.paypal_creds = null;
+                // Opcional: retornar temprano si es crítico
+              }
+            }
+            customer.paypal_creds = parsedCreds; // Asignar el objeto ya sea JSON o convertido
           } else {
              logger.error(`[CUSTOMER DB] No se pudo desencriptar las credenciales PayPal para cliente ${customer.id}. Valor en DB: ${customer.paypal_creds}`);
-             customer.paypal_creds = null; // Indicar que falló la desencriptación
+             customer.paypal_creds = null;
           }
-        } catch (parseError) {
-          logger.error(`[CUSTOMER DB] Error al parsear las credenciales PayPal desencriptadas para cliente ${customer.id}:`, parseError.message);
-          customer.paypal_creds = null; // Indicar que falló la desencriptación o el parseo
+        } catch (decryptError) {
+          logger.error(`[CUSTOMER DB] Error al desencriptar las credenciales PayPal para cliente ${customer.id}:`, decryptError.message);
+          customer.paypal_creds = null;
         }
       } else {
         logger.debug(`[CUSTOMER DB] Cliente ${customer.id} no tiene credenciales PayPal almacenadas.`);
         customer.paypal_creds = null;
       }
 
-      // Desencriptar Conekta (opcional, ejemplo similar)
+      // --- Desencriptar y procesar credenciales Conekta (similar a PayPal) ---
       if (customer.conekta_creds) {
         logger.debug(`[CUSTOMER DB] Llamando a decrypt para credenciales Conekta cliente ${customer.id}. Valor a desencriptar (longitud):`, customer.conekta_creds.length);
         try {
@@ -103,14 +110,27 @@ const findCustomerByPhoneNumber = async (phoneNumber) => {
           });
 
           if (decryptedConektaCredsString) {
-            customer.conekta_creds = JSON.parse(decryptedConektaCredsString);
-            logger.debug(`[CUSTOMER DB] Credenciales Conekta desencriptadas para cliente ${customer.id}.`);
+            let parsedCreds = null;
+            try {
+              parsedCreds = JSON.parse(decryptedConektaCredsString);
+              logger.debug(`[CUSTOMER DB] Credenciales Conekta desencriptadas y parseadas como JSON para cliente ${customer.id}.`);
+            } catch (jsonParseError) {
+              logger.warn(`[CUSTOMER DB] Error al parsear credenciales Conekta como JSON para cliente ${customer.id}:`, jsonParseError.message);
+              logger.debug(`[CUSTOMER DB] Intentando formato legacy para cliente ${customer.id}. (Lógica específica si aplica)`);
+              // Aquí puedes aplicar la lógica de convertFromLegacyFormat si Conekta también usa un formato legacy específico
+              // parsedCreds = convertFromLegacyFormat(decryptedConektaCredsString);
+              // Si no hay formato legacy para Conekta, o no coincide, dejar como null o manejar según sea necesario.
+              logger.error(`[CUSTOMER DB] No se pudo interpretar las credenciales Conekta desencriptadas para cliente ${customer.id}. Formato no válido o legacy no soportado.`);
+              customer.conekta_creds = null;
+              // Opcional: retornar temprano si Conekta es crítico
+            }
+            customer.conekta_creds = parsedCreds;
           } else {
              logger.error(`[CUSTOMER DB] No se pudo desencriptar las credenciales Conekta para cliente ${customer.id}.`);
              customer.conekta_creds = null;
           }
-        } catch (parseError) {
-          logger.error(`[CUSTOMER DB] Error al parsear las credenciales Conekta desencriptadas para cliente ${customer.id}:`, parseError.message);
+        } catch (decryptError) {
+          logger.error(`[CUSTOMER DB] Error al desencriptar las credenciales Conekta para cliente ${customer.id}:`, decryptError.message);
           customer.conekta_creds = null;
         }
       } else {
@@ -118,7 +138,7 @@ const findCustomerByPhoneNumber = async (phoneNumber) => {
         customer.conekta_creds = null;
       }
 
-      // Desencriptar MercadoPago (opcional, ejemplo similar)
+      // --- Desencriptar y procesar credenciales MercadoPago (similar a PayPal) ---
       if (customer.mercadopago_creds) {
         logger.debug(`[CUSTOMER DB] Llamando a decrypt para credenciales MercadoPago cliente ${customer.id}. Valor a desencriptar (longitud):`, customer.mercadopago_creds.length);
         try {
@@ -130,14 +150,26 @@ const findCustomerByPhoneNumber = async (phoneNumber) => {
           });
 
           if (decryptedMercadoPagoCredsString) {
-            customer.mercadopago_creds = JSON.parse(decryptedMercadoPagoCredsString);
-            logger.debug(`[CUSTOMER DB] Credenciales MercadoPago desencriptadas para cliente ${customer.id}.`);
+            let parsedCreds = null;
+            try {
+              parsedCreds = JSON.parse(decryptedMercadoPagoCredsString);
+              logger.debug(`[CUSTOMER DB] Credenciales MercadoPago desencriptadas y parseadas como JSON para cliente ${customer.id}.`);
+            } catch (jsonParseError) {
+              logger.warn(`[CUSTOMER DB] Error al parsear credenciales MercadoPago como JSON para cliente ${customer.id}:`, jsonParseError.message);
+              logger.debug(`[CUSTOMER DB] Intentando formato legacy para cliente ${customer.id}. (Lógica específica si aplica)`);
+              // Aplicar lógica de conversión si MercadoPago tiene un formato legacy específico
+              // parsedCreds = convertFromLegacyFormat(decryptedMercadoPagoCredsString);
+              logger.error(`[CUSTOMER DB] No se pudo interpretar las credenciales MercadoPago desencriptadas para cliente ${customer.id}. Formato no válido o legacy no soportado.`);
+              customer.mercadopago_creds = null;
+              // Opcional: retornar temprano si MercadoPago es crítico
+            }
+            customer.mercadopago_creds = parsedCreds;
           } else {
              logger.error(`[CUSTOMER DB] No se pudo desencriptar las credenciales MercadoPago para cliente ${customer.id}.`);
              customer.mercadopago_creds = null;
           }
-        } catch (parseError) {
-          logger.error(`[CUSTOMER DB] Error al parsear las credenciales MercadoPago desencriptadas para cliente ${customer.id}:`, parseError.message);
+        } catch (decryptError) {
+          logger.error(`[CUSTOMER DB] Error al desencriptar las credenciales MercadoPago para cliente ${customer.id}:`, decryptError.message);
           customer.mercadopago_creds = null;
         }
       } else {
@@ -145,7 +177,6 @@ const findCustomerByPhoneNumber = async (phoneNumber) => {
         customer.mercadopago_creds = null;
       }
 
-      // Devolver el cliente con las credenciales ya desencriptadas y parseadas
       return customer;
     } else {
       logger.info(`[CUSTOMER DB] Cliente NO encontrado para teléfono: ${phoneNumber}.`);
@@ -153,12 +184,12 @@ const findCustomerByPhoneNumber = async (phoneNumber) => {
     }
   } catch (error) {
     logger.error(`[CUSTOMER DB] Error al buscar cliente en la base de datos:`, error.message);
-    throw error; // Re-lanzar el error para que el módulo superior lo maneje
+    throw error;
   } finally {
-    client.release(); // Siempre liberar el cliente del pool
+    client.release();
   }
 };
 
 module.exports = {
-  findCustomerByPhoneNumber // Exportamos la función de búsqueda
+  findCustomerByPhoneNumber
 };
