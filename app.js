@@ -15,34 +15,30 @@ const app = express();
 
 // --- MIDDLEWARES ---
 
-// Middleware para parsear el cuerpo de solicitudes JSON
-// Importante para recibir mensajes de 360Dialog y webhooks (excepto para verificación de webhook PayPal que necesita rawBody)
-app.use(express.json());
-
-// Middleware para parsear el cuerpo como texto plano (necesario para la verificación de webhook de PayPal)
-// Este middleware intercepta la ruta específica del webhook de PayPal
+// Middleware para parsear el cuerpo como texto plano solo para la ruta específica del webhook de PayPal
+// Esto permite que el controlador de PayPal reciba el cuerpo como texto plano inicialmente si es necesario,
+// y lo parsee manualmente si lo requiere.
 app.use('/webhook/paypal', express.text({ type: 'application/json' }));
 
-// Middleware para parsear el cuerpo como JSON para otras rutas que no sean el webhook de PayPal
-// Este se ejecutará después del middleware específico de PayPal para otras rutas
+// Middleware para parsear el cuerpo como JSON para todas las demás rutas
+// Este middleware se ejecutará para rutas distintas a '/webhook/paypal'.
+// Para '/webhook/paypal', este middleware no se ejecutará gracias al middleware anterior.
+app.use(express.json());
+
+// Middleware genérico para rutas específicas que requieren manejo adicional del body (en este caso, PayPal)
+// Este middleware se ejecuta *después* de los anteriores.
+// Si la ruta es '/webhook/paypal' y el body es texto plano (string), lo parseamos a JSON aquí.
 app.use((req, res, next) => {
-  // Si no es la ruta de webhook de PayPal, usamos el parser JSON estándar
-  if (req.path !== '/webhook/paypal') {
-    express.json()(req, res, next);
-  } else {
-    // Si es la ruta de webhook de PayPal, el body ya está como texto plano (rawBody)
-    // Debemos parsearlo manualmente aquí antes de que llegue al controlador
-    if (req.headers['content-type'] === 'application/json' && typeof req.body === 'string') {
-      try {
-        req.body = JSON.parse(req.body);
-        logger.debug('[APP] Body del webhook de PayPal parseado a JSON.');
-      } catch (error) {
-        logger.error('[APP] Error al parsear el body del webhook de PayPal:', error.message);
-        return res.status(400).send('Invalid JSON in PayPal webhook body');
-      }
+  if (req.path === '/webhook/paypal' && typeof req.body === 'string') {
+    try {
+      req.body = JSON.parse(req.body);
+      logger.debug('[APP] Body del webhook de PayPal parseado a JSON.');
+    } catch (error) {
+      logger.error('[APP] Error al parsear el body del webhook de PayPal:', error.message);
+      return res.status(400).send('Invalid JSON in PayPal webhook body');
     }
-    next();
   }
+  next(); // Continuar con el siguiente middleware o ruta
 });
 
 // --- RUTAS ---
