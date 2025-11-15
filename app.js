@@ -58,6 +58,14 @@ app.get('/', (req, res) => {
   res.status(200).json({ message: 'MXPaylink V1 Backend is running!' });
 });
 
+// --- AÑADIDO: Ruta para Health Check de Render ---
+app.get('/healthz', (req, res) => {
+  // Puedes hacer comprobaciones básicas aquí si lo deseas (e.g., ping a la DB)
+  // Para un inicio, simplemente responder OK es suficiente.
+  res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+// --- FIN AÑADIDO ---
+
 // --- MANEJO DE ERRORES GLOBAL (Opcional pero recomendado) ---
 app.use((err, req, res, next) => {
   logger.error('Error no manejado en Express:', err.stack);
