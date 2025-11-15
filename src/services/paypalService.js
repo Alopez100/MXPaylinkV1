@@ -34,15 +34,17 @@ const getAccessToken = async (creds) => {
     const encodedCreds = Buffer.from(`${client_id}:${secret}`).toString('base64');
 
     // Configurar la solicitud POST para obtener el token
+    // El cuerpo debe ser application/x-www-form-urlencoded
     const config = {
       method: 'post',
       url: PAYPAL_TOKEN_URL,
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/x-www-form-urlencoded', // Tipo de contenido correcto
         'Authorization': `Basic ${encodedCreds}`, // Autenticación Basic con credenciales codificadas
         'User-Agent': 'MXPaylink-App/1.0' // Identificar la aplicación
       },
-       'grant_type=client_credentials', // Tipo de grant para obtener un access token
+      // El cuerpo de la solicitud debe ser una cadena formateada como application/x-www-form-urlencoded
+      data: 'grant_type=client_credentials', // Cuerpo correcto para obtener token de cliente
     };
 
     // Hacer la solicitud a PayPal
