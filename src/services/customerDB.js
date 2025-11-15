@@ -74,6 +74,9 @@ const findCustomerByPhoneNumber = async (phoneNumber) => {
 
           if (decryptedPayPalCredsString) {
             customer.paypal_creds = JSON.parse(decryptedPayPalCredsString);
+            // --- LOG DE DIAGNÓSTICO 4: Contenido del objeto parseado (clave para resolver el problema) ---
+            logger.debug(`[CUSTOMER DB] OBJETO PARSEADO de credenciales PayPal para cliente ${customer.id}:`, customer.paypal_creds);
+
             logger.debug(`[CUSTOMER DB] Credenciales PayPal desencriptadas y parseadas para cliente ${customer.id}.`);
           } else {
              logger.error(`[CUSTOMER DB] No se pudo desencriptar las credenciales PayPal para cliente ${customer.id}. Valor en DB: ${customer.paypal_creds}`);
