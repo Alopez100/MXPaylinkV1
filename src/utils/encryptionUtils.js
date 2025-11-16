@@ -115,7 +115,26 @@ function decrypt(encryptedText) {
   }
 }
 
+/**
+ * Convierte una cadena en formato 'client_id:secret' a un objeto { client_id, secret }.
+ * @param {string} credsString - La cadena a convertir.
+ * @returns {Object|null} - El objeto { client_id, secret } o null si el formato es incorrecto.
+ */
+function convertFromLegacyFormat(credsString) {
+  if (typeof credsString === 'string' && credsString.includes(':')) {
+    const parts = credsString.split(':');
+    if (parts.length === 2) {
+      return {
+        client_id: parts[0],
+        secret: parts[1]
+      };
+    }
+  }
+  return null;
+}
+
 module.exports = {
   encrypt,
-  decrypt
+  decrypt,
+  convertFromLegacyFormat // Añadir esta línea para exportar la función
 };
