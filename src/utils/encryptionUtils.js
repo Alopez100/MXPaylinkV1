@@ -125,7 +125,7 @@ function convertFromLegacyFormat(credsString) {
     const parts = credsString.split(':');
     if (parts.length === 2) {
       return {
-        lient_id: parts[0],
+        client_id: parts[0],
         secret: parts[1]
       };
     }
