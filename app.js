@@ -81,3 +81,4 @@ app.listen(PORT, '0.0.0.0', () => { // Escuchar en '0.0.0.0' para que Render pue
 });
 
 module.exports = app; // Exportar la app por si se necesita en pruebas o módulos externos
+//Nueva linea para forzar build.
