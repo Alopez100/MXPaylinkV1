@@ -77,6 +77,7 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, '0.0.0.0', () => { // Escuchar en '0.0.0.0' para que Render pueda acceder al servidor
+  logger.info('=== MARCADOR DE DESPLIEGUE: Versión 28Nov2025_02 ==='); // <--- MARCADOR AÑADIDO
   logger.info(`MXPaylink V1 Server listening on port ${PORT}`);
 });
 
