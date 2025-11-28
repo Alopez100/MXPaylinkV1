@@ -3,11 +3,13 @@
 // Lógica (Actualizada para manejar formatos antiguos y nuevos):
 //   - findCustomerByPhoneNumber: Busca un cliente por su número de teléfono en la base de datos real.
 //   - Desencripta y convierte credenciales almacenadas (PayPal, Conekta, MP) al formato { client_id, secret } o equivalente.
-//   - (La desencriptación ahora se delega a encryptionUtils.js)
+//   - (La desencriptación ahora se delega a credentialDecryptor.js)
 
 const { Pool } = require('pg'); // Importar Pool de pg
 const logger = require('../utils/logger'); // Importamos el logger
-const { decrypt } = require('../utils/encryptionUtils'); // Importamos la función de desencriptación desde el nuevo módulo
+// --- CAMBIO AQUÍ: Importar el módulo modularizado ---
+const { decryptProviderCredentials } = require('../utils/credentialDecryptor'); // Delegamos la lógica de desencriptación a credentialDecryptor.js
+// const { decrypt } = require('../utils/encryptionUtils'); // <-- Comentado, ya no se usa directamente aquí
 
 // Obtener la cadena de conexión desde las variables de entorno
 const connectionString = process.env.DATABASE_URL || `postgresql://${process.env.DB_USER}:${process.env.DB_PASS}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`;
@@ -56,37 +58,16 @@ const findCustomerByPhoneNumber = async (phoneNumber) => {
 
       // --- Desencriptar y procesar credenciales PayPal ---
       if (customer.paypal_creds) {
-        logger.debug(`[CUSTOMER DB] Llamando a decrypt para credenciales PayPal cliente ${customer.id}. Valor a desencriptar (longitud):`, customer.paypal_creds.length);
+        logger.debug(`[CUSTOMER DB] Llamando a decryptProviderCredentials para credenciales PayPal cliente ${customer.id}.`);
         try {
-          const decryptedPayPalCredsString = decrypt(customer.paypal_creds);
-          logger.debug(`[CUSTOMER DB] Resultado de decrypt PayPal para cliente ${customer.id}:`, {
-            tipoResultado: typeof decryptedPayPalCredsString,
-            tieneContenido: typeof decryptedPayPalCredsString === 'string' && decryptedPayPalCredsString.length > 0,
-            longitudResultado: typeof decryptedPayPalCredsString === 'string' ? decryptedPayPalCredsString.length : 'No es string valido'
-          });
+          // --- CAMBIO AQUÍ: Usar el módulo credentialDecryptor.js ---
+          const parsedCreds = decryptProviderCredentials(customer.paypal_creds, 'PayPal', customer.id);
 
-          if (decryptedPayPalCredsString) {
-            let parsedCreds = null;
-            // Intentar parsear como JSON
-            try {
-              parsedCreds = JSON.parse(decryptedPayPalCredsString);
-              logger.debug(`[CUSTOMER DB] Credenciales PayPal desencriptadas y parseadas como JSON para cliente ${customer.id}.`);
-            } catch (jsonParseError) {
-              logger.warn(`[CUSTOMER DB] Error al parsear credenciales PayPal como JSON para cliente ${customer.id}:`, jsonParseError.message);
-              logger.debug(`[CUSTOMER DB] Intentando formato legacy 'client_id:secret' para cliente ${customer.id}.`);
-              // Si falla el parseo JSON, intentar formato legacy
-              parsedCreds = convertFromLegacyFormat(decryptedPayPalCredsString);
-              if (parsedCreds) {
-                logger.info(`[CUSTOMER DB] Credenciales PayPal convertidas desde formato legacy para cliente ${customer.id}.`);
-              } else {
-                logger.error(`[CUSTOMER DB] No se pudo interpretar las credenciales PayPal desencriptadas para cliente ${customer.id}. Formato no válido.`);
-                customer.paypal_creds = null;
-                // Opcional: retornar temprano si es crítico
-              }
-            }
-            customer.paypal_creds = parsedCreds; // Asignar el objeto ya sea JSON o convertido
+          if (parsedCreds) {
+            logger.debug(`[CUSTOMER DB] Credenciales PayPal desencriptadas y procesadas exitosamente para cliente ${customer.id}.`);
+            customer.paypal_creds = parsedCreds; // Asignar el objeto { client_id, secret }
           } else {
-             logger.error(`[CUSTOMER DB] No se pudo desencriptar las credenciales PayPal para cliente ${customer.id}. Valor en DB: ${customer.paypal_creds}`);
+             logger.error(`[CUSTOMER DB] No se pudo desencriptar ni procesar las credenciales PayPal para cliente ${customer.id}. Valor en DB: ${customer.paypal_creds}`);
              customer.paypal_creds = null;
           }
         } catch (decryptError) {
@@ -100,33 +81,16 @@ const findCustomerByPhoneNumber = async (phoneNumber) => {
 
       // --- Desencriptar y procesar credenciales Conekta (similar a PayPal) ---
       if (customer.conekta_creds) {
-        logger.debug(`[CUSTOMER DB] Llamando a decrypt para credenciales Conekta cliente ${customer.id}. Valor a desencriptar (longitud):`, customer.conekta_creds.length);
+        logger.debug(`[CUSTOMER DB] Llamando a decryptProviderCredentials para credenciales Conekta cliente ${customer.id}.`);
         try {
-          const decryptedConektaCredsString = decrypt(customer.conekta_creds);
-          logger.debug(`[CUSTOMER DB] Resultado de decrypt Conekta para cliente ${customer.id}:`, {
-            tipoResultado: typeof decryptedConektaCredsString,
-            tieneContenido: typeof decryptedConektaCredsString === 'string' && decryptedConektaCredsString.length > 0,
-            longitudResultado: typeof decryptedConektaCredsString === 'string' ? decryptedConektaCredsString.length : 'No es string valido'
-          });
+          // --- CAMBIO AQUÍ: Usar el módulo credentialDecryptor.js ---
+          const parsedCreds = decryptProviderCredentials(customer.conekta_creds, 'Conekta', customer.id);
 
-          if (decryptedConektaCredsString) {
-            let parsedCreds = null;
-            try {
-              parsedCreds = JSON.parse(decryptedConektaCredsString);
-              logger.debug(`[CUSTOMER DB] Credenciales Conekta desencriptadas y parseadas como JSON para cliente ${customer.id}.`);
-            } catch (jsonParseError) {
-              logger.warn(`[CUSTOMER DB] Error al parsear credenciales Conekta como JSON para cliente ${customer.id}:`, jsonParseError.message);
-              logger.debug(`[CUSTOMER DB] Intentando formato legacy para cliente ${customer.id}. (Lógica específica si aplica)`);
-              // Aquí puedes aplicar la lógica de convertFromLegacyFormat si Conekta también usa un formato legacy específico
-              // parsedCreds = convertFromLegacyFormat(decryptedConektaCredsString);
-              // Si no hay formato legacy para Conekta, o no coincide, dejar como null o manejar según sea necesario.
-              logger.error(`[CUSTOMER DB] No se pudo interpretar las credenciales Conekta desencriptadas para cliente ${customer.id}. Formato no válido o legacy no soportado.`);
-              customer.conekta_creds = null;
-              // Opcional: retornar temprano si Conekta es crítico
-            }
+          if (parsedCreds) {
+            logger.debug(`[CUSTOMER DB] Credenciales Conekta desencriptadas y procesadas exitosamente para cliente ${customer.id}.`);
             customer.conekta_creds = parsedCreds;
           } else {
-             logger.error(`[CUSTOMER DB] No se pudo desencriptar las credenciales Conekta para cliente ${customer.id}.`);
+             logger.error(`[CUSTOMER DB] No se pudo desencriptar ni procesar las credenciales Conekta para cliente ${customer.id}.`);
              customer.conekta_creds = null;
           }
         } catch (decryptError) {
@@ -140,32 +104,16 @@ const findCustomerByPhoneNumber = async (phoneNumber) => {
 
       // --- Desencriptar y procesar credenciales MercadoPago (similar a PayPal) ---
       if (customer.mercadopago_creds) {
-        logger.debug(`[CUSTOMER DB] Llamando a decrypt para credenciales MercadoPago cliente ${customer.id}. Valor a desencriptar (longitud):`, customer.mercadopago_creds.length);
+        logger.debug(`[CUSTOMER DB] Llamando a decryptProviderCredentials para credenciales MercadoPago cliente ${customer.id}.`);
         try {
-          const decryptedMercadoPagoCredsString = decrypt(customer.mercadopago_creds);
-          logger.debug(`[CUSTOMER DB] Resultado de decrypt MercadoPago para cliente ${customer.id}:`, {
-            tipoResultado: typeof decryptedMercadoPagoCredsString,
-            tieneContenido: typeof decryptedMercadoPagoCredsString === 'string' && decryptedMercadoPagoCredsString.length > 0,
-            longitudResultado: typeof decryptedMercadoPagoCredsString === 'string' ? decryptedMercadoPagoCredsString.length : 'No es string valido'
-          });
+          // --- CAMBIO AQUÍ: Usar el módulo credentialDecryptor.js ---
+          const parsedCreds = decryptProviderCredentials(customer.mercadopago_creds, 'MercadoPago', customer.id);
 
-          if (decryptedMercadoPagoCredsString) {
-            let parsedCreds = null;
-            try {
-              parsedCreds = JSON.parse(decryptedMercadoPagoCredsString);
-              logger.debug(`[CUSTOMER DB] Credenciales MercadoPago desencriptadas y parseadas como JSON para cliente ${customer.id}.`);
-            } catch (jsonParseError) {
-              logger.warn(`[CUSTOMER DB] Error al parsear credenciales MercadoPago como JSON para cliente ${customer.id}:`, jsonParseError.message);
-              logger.debug(`[CUSTOMER DB] Intentando formato legacy para cliente ${customer.id}. (Lógica específica si aplica)`);
-              // Aplicar lógica de conversión si MercadoPago tiene un formato legacy específico
-              // parsedCreds = convertFromLegacyFormat(decryptedMercadoPagoCredsString);
-              logger.error(`[CUSTOMER DB] No se pudo interpretar las credenciales MercadoPago desencriptadas para cliente ${customer.id}. Formato no válido o legacy no soportado.`);
-              customer.mercadopago_creds = null;
-              // Opcional: retornar temprano si MercadoPago es crítico
-            }
+          if (parsedCreds) {
+            logger.debug(`[CUSTOMER DB] Credenciales MercadoPago desencriptadas y procesadas exitosamente para cliente ${customer.id}.`);
             customer.mercadopago_creds = parsedCreds;
           } else {
-             logger.error(`[CUSTOMER DB] No se pudo desencriptar las credenciales MercadoPago para cliente ${customer.id}.`);
+             logger.error(`[CUSTOMER DB] No se pudo desencriptar ni procesar las credenciales MercadoPago para cliente ${customer.id}.`);
              customer.mercadopago_creds = null;
           }
         } catch (decryptError) {
